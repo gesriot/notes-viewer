@@ -179,7 +179,7 @@ button:hover {
 
 /* Markdown body styles (VS Code / clean preview) */
 .markdown-body {
-  max-width: 820px;
+  max-width: none;
 }
 
 .markdown-body h1, .markdown-body h2, .markdown-body h3 {

@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import katex from "katex";
@@ -31,7 +30,6 @@ const state: AppState = {
 };
 
 let noteListEl: HTMLDivElement;
-let currentImages: string[] = [];
 let focusedImageIdx = 0;
 let previewEl: HTMLDivElement;
 let searchEl: HTMLInputElement;
@@ -110,7 +108,6 @@ async function selectNote(index: number) {
   state.selectedIndex = index;
   const note = state.filtered[index];
   state.currentNotePath = note.path;
-  currentImages = [];
   focusedImageIdx = 0;
 
   titleEl.textContent = note.title;
@@ -175,40 +172,34 @@ function postRenderMath(container: HTMLElement) {
 }
 
 async function rewriteImages(container: HTMLElement, noteRelativePath: string) {
-  // Get vault root once (absolute path from Rust)
-  let vaultRoot: string;
-  try {
-    vaultRoot = await invoke<string>("get_vault_root_cmd");
-  } catch {
-    // Fallback for some dev scenarios
-    vaultRoot = "vault";
-  }
+  const imgs = Array.from(container.querySelectorAll<HTMLImageElement>("img"));
+  for (const img of imgs) {
+    const original = img.getAttribute("src") || "";
+    if (!original || /^(https?:|data:)/i.test(original)) continue;
 
-  const imgs = container.querySelectorAll<HTMLImageElement>("img");
-  imgs.forEach((img) => {
-    const src = img.getAttribute("src") || "";
-    if (!src || src.startsWith("http") || src.startsWith("data:")) return;
+    img.setAttribute("data-original-src", original);
+    try {
+      // Backend reads the file and returns a base64 data URL. Embedding the
+      // bytes works the same on macOS and Windows, unlike file paths routed
+      // through the asset protocol.
+      img.src = await invoke<string>("read_image_data_url", {
+        notePath: noteRelativePath,
+        src: original,
+      });
+    } catch {
+      // leave the unresolved image as-is
+    }
 
-    // Typical: ../images/foo.jpg or ./images/ or images/
-    let filename = src.split("/").pop() || src;
-    // Remove query etc
-    filename = filename.split("?")[0];
-
-    // Build absolute disk path: vaultRoot + /images + filename
-    const fullPath = `${vaultRoot}/images/${filename}`;
-    const tauriSrc = convertFileSrc(fullPath);
-    img.src = tauriSrc;
-
-    // Make clickable to open externally
+    img.style.cursor = "pointer";
     img.onclick = async (e) => {
       e.stopImmediatePropagation();
       try {
-        await invoke("open_path", { path: fullPath });
+        await invoke("open_note_image", { notePath: noteRelativePath, src: original });
       } catch {
         // ignore
       }
     };
-  });
+  }
 }
 
 function renderPreview(rawMarkdown: string, noteRelativePath: string) {
@@ -338,57 +329,29 @@ function setupKeyboard() {
 }
 
 async function cycleImage(forward: boolean) {
-  if (currentImages.length === 0) {
-    // scan current preview for images
-    currentImages = Array.from(previewEl.querySelectorAll("img")).map((img) => {
-      // the src is already converted, but we stored original full path? hack: use data or rebuild
-      // For simplicity, re-extract from the note content is overkill.
-      // Instead store last known image paths when rewriting.
-      return img.src;
-    });
-    focusedImageIdx = 0;
-  }
-  if (currentImages.length === 0) return;
+  const imgs = Array.from(previewEl.querySelectorAll<HTMLImageElement>("img"));
+  if (imgs.length === 0) return;
 
   focusedImageIdx = forward
-    ? (focusedImageIdx + 1) % currentImages.length
-    : (focusedImageIdx - 1 + currentImages.length) % currentImages.length;
+    ? (focusedImageIdx + 1) % imgs.length
+    : (focusedImageIdx - 1 + imgs.length) % imgs.length;
 
-  const targetSrc = currentImages[focusedImageIdx];
-  const imgs = Array.from(previewEl.querySelectorAll("img"));
-  const target = imgs.find((i) => i.src === targetSrc) || imgs[focusedImageIdx];
-
-  if (target) {
-    target.scrollIntoView({ behavior: "smooth", block: "center" });
-    // brief highlight
-    target.style.outline = "2px solid #3794ff";
-    setTimeout(() => (target.style.outline = ""), 900);
-  }
+  const target = imgs[focusedImageIdx];
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+  target.style.outline = "2px solid #3794ff";
+  setTimeout(() => (target.style.outline = ""), 900);
 }
 
 async function openCurrentImage() {
-  // Try to open first visible image or last cycled
-  const imgs = Array.from(previewEl.querySelectorAll("img"));
-  if (imgs.length === 0) return;
-
-  let pathToOpen = "";
-  // Best effort: try to get original file path by asking backend for current note images
-  // For simplicity call a command
+  if (!state.currentNotePath) return;
+  const imgs = Array.from(previewEl.querySelectorAll<HTMLImageElement>("img"));
+  const target = imgs[focusedImageIdx] || imgs[0];
+  const original = target?.getAttribute("data-original-src");
+  if (!original) return;
   try {
-    if (state.currentNotePath) {
-      const images = await invoke<string[]>("get_note_images", { path: state.currentNotePath });
-      if (images.length > 0) {
-        pathToOpen = images[0];
-      }
-    }
-  } catch {}
-
-  if (!pathToOpen && imgs[0]) {
-    // last resort: the src is tauri asset url, not usable for open. Skip.
-    return;
-  }
-  if (pathToOpen) {
-    await invoke("open_path", { path: pathToOpen });
+    await invoke("open_note_image", { notePath: state.currentNotePath, src: original });
+  } catch {
+    // ignore
   }
 }
 
