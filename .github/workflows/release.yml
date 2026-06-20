@@ -11,13 +11,13 @@ jobs:
       contents: write
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
       - name: install Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: lts/*
 

@@ -2,13 +2,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tauri::{command, Manager};
-use tauri_plugin_shell::ShellExt;
+use tauri_plugin_opener::OpenerExt;
 use walkdir::WalkDir;
 
 static FRONTMATTER_RE: Lazy<Regex> = Lazy::new(|| {
@@ -26,17 +26,36 @@ struct NoteInfo {
 }
 
 fn get_vault_root(app: &tauri::AppHandle) -> PathBuf {
-    // Prefer resource dir (for bundled), fallback to cwd + vault for dev
+    // Prefer resource dir (for bundled), fallback to cwd + vault for dev.
+    // Tauri encodes the `../vault` resource path as `_up_/vault` inside the
+    // bundle, so check both layouts.
     if let Ok(res) = app.path().resource_dir() {
-        let candidate = res.join("vault");
-        if candidate.join("notes").exists() {
-            return candidate;
+        for candidate in [res.join("vault"), res.join("_up_").join("vault")] {
+            if candidate.join("notes").exists() {
+                return candidate;
+            }
         }
     }
     // Dev fallback: current working dir + vault
     std::env::current_dir()
         .unwrap_or_else(|_| PathBuf::from("."))
         .join("vault")
+}
+
+/// Resolve a vault-relative path to an absolute path, rejecting anything that
+/// escapes the vault (e.g. `../../etc/passwd`).
+fn resolve_in_vault(vault: &Path, rel: &str) -> Result<PathBuf, String> {
+    let canon_vault = vault
+        .canonicalize()
+        .map_err(|e| format!("vault not accessible: {e}"))?;
+    let canon = vault
+        .join(rel)
+        .canonicalize()
+        .map_err(|e| format!("path not accessible: {e}"))?;
+    if !canon.starts_with(&canon_vault) {
+        return Err("refused: path is outside the vault".into());
+    }
+    Ok(canon)
 }
 
 fn parse_frontmatter_and_title(raw: &str, default_title: &str) -> (Vec<String>, String) {
@@ -135,7 +154,7 @@ fn load_notes(app: tauri::AppHandle) -> Result<Vec<NoteInfo>, String> {
 #[command]
 fn get_note_markdown(app: tauri::AppHandle, path: String) -> Result<String, String> {
     let vault = get_vault_root(&app);
-    let full = vault.join(&path);
+    let full = resolve_in_vault(&vault, &path)?;
     fs::read_to_string(&full).map_err(|e| format!("failed to read {}: {}", full.display(), e))
 }
 
@@ -147,7 +166,8 @@ fn get_vault_root_cmd(app: tauri::AppHandle) -> Result<String, String> {
 #[command]
 fn get_note_images(app: tauri::AppHandle, path: String) -> Result<Vec<String>, String> {
     let vault = get_vault_root(&app);
-    let full = vault.join(&path);
+    let full = resolve_in_vault(&vault, &path)?;
+    let canon_vault = vault.canonicalize().map_err(|e| e.to_string())?;
     let content = fs::read_to_string(&full).unwrap_or_default();
 
     // very simple image extractor for ../images/xxx or images/xxx
@@ -168,8 +188,11 @@ fn get_note_images(app: tauri::AppHandle, path: String) -> Result<Vec<String>, S
                 note_dir.join(href)
             };
 
-            if img_path.exists() {
-                images.push(img_path.to_string_lossy().to_string());
+            // Only surface images that actually resolve inside the vault.
+            if let Ok(canon) = img_path.canonicalize() {
+                if canon.starts_with(&canon_vault) {
+                    images.push(canon.to_string_lossy().to_string());
+                }
             }
         }
     }
@@ -178,9 +201,17 @@ fn get_note_images(app: tauri::AppHandle, path: String) -> Result<Vec<String>, S
 
 #[command]
 async fn open_path(app: tauri::AppHandle, path: String) -> Result<(), String> {
-    // Cross platform open using tauri shell plugin
-    app.shell()
-        .open(&path, None)
+    // Only allow opening files that live inside the vault.
+    let vault = get_vault_root(&app);
+    let canon_vault = vault.canonicalize().map_err(|e| e.to_string())?;
+    let canon = PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    if !canon.starts_with(&canon_vault) {
+        return Err("refused: path is outside the vault".into());
+    }
+    app.opener()
+        .open_path(canon.to_string_lossy().to_string(), None::<&str>)
         .map_err(|e| e.to_string())
 }
 
@@ -193,7 +224,7 @@ fn get_note_list_for_debug(app: tauri::AppHandle) -> Result<Vec<String>, String>
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             load_notes,
             get_note_markdown,

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { marked } from "marked";
+import DOMPurify from "dompurify";
 import katex from "katex";
 import hljs from "highlight.js";
 import "highlight.js/styles/vs2015.css"; // dark-ish theme close to VS Code
@@ -216,7 +217,9 @@ function renderPreview(rawMarkdown: string, noteRelativePath: string) {
 
   const html = marked.parse(preprocessed) as string;
 
-  previewEl.innerHTML = html;
+  // Notes are untrusted input — strip scripts/handlers before inserting.
+  // data-latex spans survive (data-* attrs are kept) for postRenderMath.
+  previewEl.innerHTML = DOMPurify.sanitize(html);
 
   // Enhance
   postRenderMath(previewEl);
