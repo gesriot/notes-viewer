@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Generate the Tauri icon set in src-tauri/icons/ from the project icon.png.
 
-The source render places the app object on a flat grey backdrop, so we crop to
-the object (by distance from the sampled background colour), apply a rounded
-alpha mask, and emit the PNG/ICNS/ICO files Tauri references in tauri.conf.json.
+The source render places the app object on a flat grey backdrop. We remove that
+backdrop (making it transparent) by flood-filling background-coloured pixels that
+are connected to the image border — interior light pixels stay opaque — then emit
+the PNG/ICNS/ICO files Tauri references in tauri.conf.json.
 
-Run from the project root:  python3 scripts/make_icons.py
+Needs numpy, scipy and Pillow. Run from the project root:
+  python3 scripts/make_icons.py
 """
 
 from __future__ import annotations
@@ -16,7 +18,8 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageFilter
+from scipy import ndimage
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / "icon.png"
@@ -50,9 +53,11 @@ ICNS_ENTRIES = [
 ]
 
 
-def rounded_master(source: Path, tol: float = 90.0, radius_ratio: float = 0.20) -> Image.Image:
-    rgb = np.asarray(Image.open(source).convert("RGB")).astype(np.float32)
-    patch = 50
+def transparent_master(source: Path, tol: float = 70.0, margin: float = 0.06) -> Image.Image:
+    """Return the icon object on a transparent background, squared and padded."""
+    img = Image.open(source).convert("RGB")
+    rgb = np.asarray(img).astype(np.float32)
+    patch = 40
     corners = np.concatenate([
         rgb[:patch, :patch].reshape(-1, 3),
         rgb[:patch, -patch:].reshape(-1, 3),
@@ -61,27 +66,31 @@ def rounded_master(source: Path, tol: float = 90.0, radius_ratio: float = 0.20) 
     ])
     bg = corners.mean(0)
     dist = np.sqrt(((rgb - bg) ** 2).sum(2))
-    ys, xs = np.where(dist > tol)
-    if xs.size == 0:
-        raise ValueError("could not locate the icon object against the background")
 
-    left, right = int(xs.min()), int(xs.max()) + 1
-    top, bottom = int(ys.min()), int(ys.max()) + 1
-    side = max(right - left, bottom - top)
-    cx, cy = (left + right) // 2, (top + bottom) // 2
-    img = Image.open(source).convert("RGBA")
-    l = max(0, min(cx - side // 2, img.width - side))
-    t = max(0, min(cy - side // 2, img.height - side))
-    crop = img.crop((l, t, l + side, t + side))
+    # Background = background-coloured pixels connected to the image border.
+    # Interior light pixels (e.g. text) are enclosed and stay opaque.
+    bg_mask = dist < tol
+    labels, _ = ndimage.label(bg_mask)
+    border = set(np.unique(np.concatenate(
+        [labels[0, :], labels[-1, :], labels[:, 0], labels[:, -1]]
+    ))) - {0}
+    foreground = ~np.isin(labels, list(border))
 
-    scale = 4
-    radius = round(side * radius_ratio)
-    mask_big = Image.new("L", (side * scale, side * scale), 0)
-    ImageDraw.Draw(mask_big).rounded_rectangle(
-        (0, 0, side * scale - 1, side * scale - 1), radius=radius * scale, fill=255
-    )
-    crop.putalpha(mask_big.resize((side, side), Image.Resampling.LANCZOS))
-    return crop
+    # Keep only the largest opaque blob to drop stray shadow remnants.
+    fg_labels, n = ndimage.label(foreground)
+    if n > 0:
+        sizes = ndimage.sum(np.ones_like(fg_labels), fg_labels, range(1, n + 1))
+        foreground = fg_labels == (1 + int(np.argmax(sizes)))
+
+    alpha = np.where(foreground, 255, 0).astype(np.uint8)
+    out = Image.fromarray(np.dstack([np.asarray(img), alpha]), "RGBA")
+    out.putalpha(out.split()[3].filter(ImageFilter.GaussianBlur(1.0)))  # feather edges
+
+    out = out.crop(out.split()[3].getbbox())
+    side = round(max(out.size) * (1 + margin * 2))
+    canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    canvas.paste(out, ((side - out.width) // 2, (side - out.height) // 2), out)
+    return canvas
 
 
 def write_icns(master: Image.Image, output: Path) -> None:
@@ -111,7 +120,7 @@ def write_icns(master: Image.Image, output: Path) -> None:
 
 
 def main() -> None:
-    master = rounded_master(SOURCE)
+    master = transparent_master(SOURCE)
     ICONS_DIR.mkdir(parents=True, exist_ok=True)
 
     for name, size in PNG_SIZES.items():

@@ -4,8 +4,26 @@ A clean, high-fidelity Markdown vault viewer that uses web technologies for rend
 
 - Sidebar with tag search (AND tokens, like the original TUI)
 - Excellent HTML rendering: real tables, typography, images, code highlighting, KaTeX math
-- No editor — pure viewer
+- No editor – pure viewer
 - Reuses your vault layout (notes/ + images/)
+
+## Install
+
+Grab the latest build from the [Releases](https://github.com/gesriot/notes-viewer/releases) page.
+
+### macOS
+
+The app is not notarized, so macOS quarantines it after download. Copy it to
+`Applications`, then clear the quarantine flag once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/notes-viewer.app
+```
+
+### Windows
+
+Download the portable `.zip`, extract it, and run `notes-viewer.exe` – keep the
+`vault` folder next to the executable.
 
 ## Run (development)
 
@@ -29,12 +47,12 @@ The built app includes the copied `vault` (if you keep it in resources).
 
 ## Controls (keyboard)
 
-- `/` — focus search
-- `↑` `↓` / `j` `k` — select note
-- `Space` / `b` — scroll preview
-- `[` `]` — cycle images in current note (highlights + scrolls)
-- `o` — open first/current image externally
-- `Ctrl/Cmd + R` — reload vault
+- `/` – focus search
+- `↑` `↓` / `j` `k` – select note
+- `Space` / `b` – scroll preview
+- `[` `]` – cycle images in current note (highlights + scrolls)
+- `o` – open first/current image externally
+- `Ctrl/Cmd + R` – reload vault
 - Click images in preview to open them
 
 ## Notes location

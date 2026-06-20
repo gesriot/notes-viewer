@@ -36,9 +36,18 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'Notes Viewer ${{ github.ref_name }}'
-          releaseBody: 'Automated build from CI.'
+          releaseBody: |
+            Notes Viewer 0.2.0
+
+            A desktop Markdown notes viewer with high-fidelity rendering.
+
+            • Night Owl-inspired visual style – a deep dark-blue color theme
+            • JetBrains Mono monospace font
+            • Full HTML rendering: tables, KaTeX formulas, code highlighting and inline images
+            • Tag search, smooth navigation and vault image handling
+            • Lightweight native app built on Tauri 2
           releaseDraft: false
-          prerelease: true
+          prerelease: false
 
   windows:
     name: Windows portable
@@ -76,7 +85,17 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          prerelease: true
+          prerelease: false
+          body: |
+            Notes Viewer 0.2.0
+
+            A desktop Markdown notes viewer with high-fidelity rendering.
+
+            • Night Owl-inspired visual style – a deep dark-blue color theme
+            • JetBrains Mono monospace font
+            • Full HTML rendering: tables, KaTeX formulas, code highlighting and inline images
+            • Tag search, smooth navigation and vault image handling
+            • Lightweight native app built on Tauri 2
           files: notes-viewer_${{ github.ref_name }}_windows_x64_portable.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

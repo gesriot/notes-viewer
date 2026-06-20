@@ -3,7 +3,8 @@ import { marked } from "marked";
 import DOMPurify from "dompurify";
 import katex from "katex";
 import hljs from "highlight.js";
-import "highlight.js/styles/vs2015.css"; // dark-ish theme close to VS Code
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/700.css";
 import "katex/dist/katex.min.css";
 
 // Types matching backend
