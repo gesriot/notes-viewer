@@ -9,7 +9,13 @@ jobs:
   publish-tauri:
     permissions:
       contents: write
-    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-15       # Apple Silicon .dmg
+          - platform: windows-latest # Windows installer .exe
+    runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v5
 
