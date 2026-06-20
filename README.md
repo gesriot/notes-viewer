@@ -22,7 +22,7 @@ xattr -dr com.apple.quarantine /Applications/notes-viewer.app
 
 ### Windows
 
-Download the portable `.zip`, extract it, and run `notes-viewer.exe` – keep the
+Download the Windows `.zip`, extract it, and run `notes-viewer.exe` – keep the
 `vault` folder next to the executable.
 
 ## Run (development)

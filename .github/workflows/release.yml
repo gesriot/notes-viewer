@@ -50,7 +50,7 @@ jobs:
           prerelease: false
 
   windows:
-    name: Windows portable
+    name: Windows
     needs: macos # release is created by the macOS job; this one appends to it
     permissions:
       contents: write
@@ -69,33 +69,19 @@ jobs:
       - name: install frontend dependencies
         run: npm install
 
-      - name: build portable exe (no installer)
+      - name: build exe (no installer)
         run: npm run tauri build -- --no-bundle
 
-      - name: assemble portable zip (exe + vault)
+      - name: assemble zip (exe + vault)
         shell: pwsh
         run: |
-          $stage = "notes-viewer-portable"
+          $stage = "notes-viewer-windows"
           New-Item -ItemType Directory -Force -Path $stage | Out-Null
           Copy-Item "src-tauri/target/release/notes-viewer.exe" "$stage/"
           Copy-Item -Recurse "vault" "$stage/vault"
-          Compress-Archive -Path "$stage/*" -DestinationPath "notes-viewer_${{ github.ref_name }}_windows_x64_portable.zip" -Force
+          Compress-Archive -Path "$stage/*" -DestinationPath "notes-viewer_${{ github.ref_name }}_windows_x64.zip" -Force
 
-      - name: upload portable zip to release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          prerelease: false
-          body: |
-            Notes Viewer 0.2.0
-
-            A desktop Markdown notes viewer with high-fidelity rendering.
-
-            • Night Owl-inspired visual style – a deep dark-blue color theme
-            • JetBrains Mono monospace font
-            • Full HTML rendering: tables, KaTeX formulas, code highlighting and inline images
-            • Tag search, smooth navigation and vault image handling
-            • Lightweight native app built on Tauri 2
-          files: notes-viewer_${{ github.ref_name }}_windows_x64_portable.zip
+      - name: upload zip to release
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ github.ref_name }} "notes-viewer_${{ github.ref_name }}_windows_x64.zip" --repo ${{ github.repository }} --clobber
