@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Notes Viewer</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div class="header-left">
+          <span class="title">Notes Viewer</span>
+          <span id="count" class="count"></span>
+        </div>
+        <div class="header-actions">
+          <button id="reload-btn" title="Reload vault (Ctrl+R)">Reload</button>
+        </div>
+      </header>
+
+      <div class="main">
+        <div class="sidebar">
+          <input
+            id="search"
+            type="text"
+            placeholder="Search by tags (e.g. graphrag rust)"
+            autocomplete="off"
+          />
+          <div id="note-list" class="note-list"></div>
+        </div>
+
+        <div class="preview-pane">
+          <div id="preview-header">
+            <span id="note-title"></span>
+            <span id="note-tags"></span>
+          </div>
+          <div id="preview" class="preview markdown-body"></div>
+          <div id="preview-footer">
+            <span>↑↓/jk: select • /: search • []: cycle images • o: open image • R: reload • q: quit</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
